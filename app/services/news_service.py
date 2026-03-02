@@ -1,7 +1,8 @@
-"""국내/해외 뉴스 수집 서비스"""
+"""국내/해외 뉴스 수집 서비스 (최신순 정렬)"""
 from datetime import datetime
 from typing import Optional
 import feedparser
+from time import mktime
 import requests
 from bs4 import BeautifulSoup
 
@@ -26,24 +27,28 @@ def get_domestic_news(limit: int = 10) -> list[dict]:
                 link = entry.get("link", "")
                 published = entry.get("published", "")
                 summary = entry.get("summary", "")[:200] if entry.get("summary") else None
+                ts = 0
+                try:
+                    if hasattr(entry, "published_parsed") and entry.published_parsed:
+                        ts = mktime(entry.published_parsed)
+                except Exception:
+                    pass
                 news_list.append({
                     "title": title,
                     "link": link,
                     "source": source_name,
                     "published": published,
+                    "published_ts": ts,
                     "summary": summary,
                     "type": "domestic",
                 })
-                if len(news_list) >= limit:
+                if len(news_list) >= limit * 2:
                     break
         except Exception:
             continue
-        if len(news_list) >= limit:
-            break
-    
+    news_list.sort(key=lambda x: x.get("published_ts", 0), reverse=True)
     if not news_list:
         return _mock_domestic_news()
-    
     return news_list[:limit]
 
 
@@ -68,24 +73,28 @@ def get_international_news(limit: int = 10) -> list[dict]:
                 link = entry.get("link", "")
                 published = entry.get("published", "")
                 summary = entry.get("summary", "")[:300] if entry.get("summary") else None
+                ts = 0
+                try:
+                    if hasattr(entry, "published_parsed") and entry.published_parsed:
+                        ts = mktime(entry.published_parsed)
+                except Exception:
+                    pass
                 news_list.append({
                     "title": title,
                     "link": link,
                     "source": source_name,
                     "published": published,
+                    "published_ts": ts,
                     "summary": summary,
                     "type": "international",
                 })
-                if len(news_list) >= limit:
+                if len(news_list) >= limit * 2:
                     break
         except Exception:
             continue
-        if len(news_list) >= limit:
-            break
-    
+    news_list.sort(key=lambda x: x.get("published_ts", 0), reverse=True)
     if not news_list:
         return _mock_international_news()
-    
     return news_list[:limit]
 
 

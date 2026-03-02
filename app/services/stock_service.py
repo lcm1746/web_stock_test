@@ -10,36 +10,81 @@ except Exception:
 
 
 def get_index_overview() -> dict:
-    """KOSPI, KOSDAQ 지수 현황"""
-    if stock is None:
-        return _mock_index_overview()
-    
+    """KOSPI, KOSDAQ 지수 현황 (yfinance 실시간 우선, pykrx 폴백)"""
+    result = _get_index_via_yfinance()
+    if result:
+        return result
+    if stock is not None:
+        result = _get_index_via_pykrx()
+        if result:
+            return result
+    return _mock_index_overview()
+
+
+def _get_index_via_yfinance() -> Optional[dict]:
+    """Yahoo Finance로 KOSPI(^KS11), KOSDAQ(^KQ11) 실시간 조회"""
+    try:
+        import yfinance as yf
+        kospi = yf.Ticker("^KS11")
+        kosdaq = yf.Ticker("^KQ11")
+        kospi_hist = kospi.history(period="5d")
+        kosdaq_hist = kosdaq.history(period="5d")
+        if kospi_hist is None or kospi_hist.empty or kosdaq_hist is None or kosdaq_hist.empty:
+            return None
+        kospi_today = kospi_hist.iloc[-1]
+        kosdaq_today = kosdaq_hist.iloc[-1]
+        kospi_prev = kospi_hist.iloc[-2] if len(kospi_hist) > 1 else kospi_today
+        kosdaq_prev = kosdaq_hist.iloc[-2] if len(kosdaq_hist) > 1 else kosdaq_today
+
+        def _chg(cur, prev):
+            if prev and prev != 0:
+                return float((cur - prev) / prev * 100)
+            return 0.0
+
+        return {
+            "kospi": {
+                "value": float(kospi_today["Close"]),
+                "change": float(kospi_today["Close"] - kospi_prev["Close"]),
+                "change_pct": _chg(kospi_today["Close"], kospi_prev["Close"]),
+            },
+            "kosdaq": {
+                "value": float(kosdaq_today["Close"]),
+                "change": float(kosdaq_today["Close"] - kosdaq_prev["Close"]),
+                "change_pct": _chg(kosdaq_today["Close"], kosdaq_prev["Close"]),
+            },
+            "date": datetime.now().strftime("%Y%m%d"),
+        }
+    except Exception:
+        return None
+
+
+def _get_index_via_pykrx() -> Optional[dict]:
+    """PyKRX로 지수 조회"""
     today = datetime.now().strftime("%Y%m%d")
     try:
         kospi = stock.get_index_ohlcv_by_date("20200101", today, "1001")
         kosdaq = stock.get_index_ohlcv_by_date("20200101", today, "2001")
-        
         kospi_today = kospi.iloc[-1] if len(kospi) > 0 else None
         kosdaq_today = kosdaq.iloc[-1] if len(kosdaq) > 0 else None
-        
         kospi_prev = kospi.iloc[-2] if len(kospi) > 1 else kospi_today
         kosdaq_prev = kosdaq.iloc[-2] if len(kosdaq) > 1 else kosdaq_today
-        
+        if kospi_today is None or kosdaq_today is None:
+            return None
         return {
             "kospi": {
-                "value": float(kospi_today["종가"]) if kospi_today is not None else 0,
-                "change": float(kospi_today["종가"] - kospi_prev["종가"]) if kospi_today is not None else 0,
+                "value": float(kospi_today["종가"]),
+                "change": float(kospi_today["종가"] - kospi_prev["종가"]),
                 "change_pct": float((kospi_today["종가"] - kospi_prev["종가"]) / kospi_prev["종가"] * 100) if kospi_prev["종가"] else 0,
             },
             "kosdaq": {
-                "value": float(kosdaq_today["종가"]) if kosdaq_today is not None else 0,
-                "change": float(kosdaq_today["종가"] - kosdaq_prev["종가"]) if kosdaq_today is not None else 0,
+                "value": float(kosdaq_today["종가"]),
+                "change": float(kosdaq_today["종가"] - kosdaq_prev["종가"]),
                 "change_pct": float((kosdaq_today["종가"] - kosdaq_prev["종가"]) / kosdaq_prev["종가"] * 100) if kosdaq_prev["종가"] else 0,
             },
             "date": today,
         }
     except Exception:
-        return _mock_index_overview()
+        return None
 
 
 def get_stock_ohlcv(ticker: str, days: int = 120) -> list[dict]:
@@ -232,8 +277,11 @@ def _mock_chart_data(ticker: str) -> list:
 
 
 def _mock_top_stocks() -> list:
+    """우량주(5만↑) + 소형주(5만↓) 혼합 mock"""
     return [
         {"ticker": "005930", "name": "삼성전자", "close": 72000, "change": 1.2, "change_pct": 1.2, "volume": 15000000, "market": "KOSPI"},
         {"ticker": "000660", "name": "SK하이닉스", "close": 185000, "change": -0.5, "change_pct": -0.5, "volume": 8000000, "market": "KOSPI"},
         {"ticker": "035420", "name": "NAVER", "close": 195000, "change": 0.8, "change_pct": 0.8, "volume": 2000000, "market": "KOSPI"},
+        {"ticker": "247540", "name": "에코플라스틱", "close": 12500, "change": 2.1, "change_pct": 2.1, "volume": 3500000, "market": "KOSDAQ"},
+        {"ticker": "086520", "name": "에코프로", "close": 38500, "change": -1.2, "change_pct": -1.2, "volume": 2800000, "market": "KOSDAQ"},
     ]
