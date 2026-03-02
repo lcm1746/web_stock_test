@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.packages/
+packages/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Env
+.env
+.env.local
+
+# MPL
+.matplotlib/
+
+# OS
+.DS_Store
+Thumbs.db
+._*
+**/._*
+*\\._*

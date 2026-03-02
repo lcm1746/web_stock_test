@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>주식 추천 서비스 - 일일 리포트</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1419;
+            --card: #1a2332;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --accent: #58a6ff;
+            --green: #3fb950;
+            --red: #f85149;
+        }
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: var(--bg); 
+            color: var(--text); 
+            margin: 0; 
+            padding: 24px;
+            line-height: 1.6;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        h1 { font-size: 1.75rem; font-weight: 700; margin: 0; color: var(--text); }
+        .report-date { color: var(--muted); font-size: 0.95rem; }
+        
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .card h2 { font-size: 1.15rem; margin: 0 0 20px 0; color: var(--accent); }
+        
+        .market-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .market-item {
+            padding: 16px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+        }
+        .market-item .label { font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
+        .market-item .value { font-size: 1.5rem; font-weight: 600; }
+        .market-item .change { font-size: 0.9rem; }
+        .market-item .change.up { color: var(--green); }
+        .market-item .change.down { color: var(--red); }
+        
+        .stock-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .stock-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .stock-card h3 { margin: 0 0 8px 0; font-size: 1rem; }
+        .stock-card .ticker { color: var(--muted); font-size: 0.8rem; margin-bottom: 12px; }
+        .stock-card .price { font-size: 1.25rem; font-weight: 600; }
+        .stock-card .reason { font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+        .stock-card .targets {
+            margin-top: 12px;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+        .stock-card .targets .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .stock-card .targets .row:last-child { margin-bottom: 0; }
+        .stock-card .targets .label { color: var(--muted); }
+        .stock-card .targets .val.up { color: var(--green); }
+        .stock-card .targets .val.down { color: var(--red); }
+        .stock-card canvas { height: 120px !important; margin-top: 12px; }
+        
+        .news-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        @media (max-width: 900px) { .news-grid { grid-template-columns: 1fr; } }
+        .news-list { list-style: none; padding: 0; margin: 0; }
+        .news-list li {
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .news-list li:last-child { border-bottom: none; }
+        .news-list a { color: var(--accent); text-decoration: none; }
+        .news-list a:hover { text-decoration: underline; }
+        .news-list .source { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+        
+        .chart-container { position: relative; height: 300px; margin-top: 20px; }
+        .loading { text-align: center; padding: 40px; color: var(--muted); }
+        .btn { 
+            background: var(--accent); 
+            color: #fff; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 8px; 
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .btn:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>📊 주식 추천 서비스</h1>
+                <p class="report-date">일일 리포트 · <span id="reportDate">--</span></p>
+            </div>
+            <button class="btn" onclick="loadReport()">🔄 새로고침</button>
+        </header>
+
+        <section class="card">
+            <h2>시장 현황</h2>
+            <div class="market-grid" id="marketOverview">
+                <div class="loading">로딩 중...</div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>오늘의 추천 종목 <span style="font-size:0.75rem;font-weight:normal;color:var(--muted)">(일일 단타 기준)</span></h2>
+            <div class="stock-grid" id="recommendedStocks">
+                <div class="loading">로딩 중...</div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>뉴스 · 시사</h2>
+            <div class="news-grid">
+                <div>
+                    <h3 style="font-size:1rem;margin-bottom:12px;">🇰🇷 국내</h3>
+                    <ul class="news-list" id="domesticNews"></ul>
+                </div>
+                <div>
+                    <h3 style="font-size:1rem;margin-bottom:12px;">🌐 해외</h3>
+                    <ul class="news-list" id="internationalNews"></ul>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        
+        async function loadReport() {
+            try {
+                const res = await fetch(`${API_BASE}/api/reports`);
+                const data = await res.json();
+                renderReport(data);
+            } catch (e) {
+                console.error(e);
+                document.getElementById('marketOverview').innerHTML = '<div class="loading">데이터 로딩 실패</div>';
+            }
+        }
+
+        function renderReport(data) {
+            document.getElementById('reportDate').textContent = `${data.report_date} ${data.report_time}`;
+            
+            // 시장 현황
+            const m = data.market_overview;
+            document.getElementById('marketOverview').innerHTML = `
+                <div class="market-item">
+                    <div class="label">KOSPI</div>
+                    <div class="value">${m.kospi?.value?.toLocaleString() ?? '-'}</div>
+                    <div class="change ${m.kospi?.change >= 0 ? 'up' : 'down'}">
+                        ${m.kospi?.change >= 0 ? '+' : ''}${m.kospi?.change?.toFixed(2) ?? '-'} (${m.kospi?.change_pct >= 0 ? '+' : ''}${m.kospi?.change_pct?.toFixed(2) ?? '-'}%)
+                    </div>
+                </div>
+                <div class="market-item">
+                    <div class="label">KOSDAQ</div>
+                    <div class="value">${m.kosdaq?.value?.toLocaleString() ?? '-'}</div>
+                    <div class="change ${m.kosdaq?.change >= 0 ? 'up' : 'down'}">
+                        ${m.kosdaq?.change >= 0 ? '+' : ''}${m.kosdaq?.change?.toFixed(2) ?? '-'} (${m.kosdaq?.change_pct >= 0 ? '+' : ''}${m.kosdaq?.change_pct?.toFixed(2) ?? '-'}%)
+                    </div>
+                </div>
+            `;
+
+            // 추천 종목
+            const stocksEl = document.getElementById('recommendedStocks');
+            stocksEl.innerHTML = (data.recommended_stocks || []).map(s => `
+                <div class="stock-card">
+                    <h3>${s.name}</h3>
+                    <div class="ticker">${s.ticker} · ${s.market}</div>
+                    <div class="price">
+                        ${s.close?.toLocaleString() ?? '-'}원
+                        <span class="${s.change_pct >= 0 ? 'up' : 'down'}" style="font-size:0.9rem;margin-left:8px;">
+                            ${s.change_pct >= 0 ? '+' : ''}${s.change_pct?.toFixed(2) ?? '-'}%
+                        </span>
+                    </div>
+                    <div class="reason">${s.reason || '-'}</div>
+                    ${(s.targets && s.targets.target_buy) ? `
+                    <div class="targets">
+                        <div class="row"><span class="label">매수가</span><span>${(s.targets.target_buy||0).toLocaleString()}원</span></div>
+                        <div class="row"><span class="label">목표매도</span><span class="val up">${(s.targets.target_sell||0).toLocaleString()}원 (+${s.targets.expect_return_pct||0}%)</span></div>
+                        <div class="row"><span class="label">손절가</span><span class="val down">${(s.targets.stop_loss||0).toLocaleString()}원</span></div>
+                        <div class="row"><span class="label">지지/저항</span><span>${(s.targets.support||0).toLocaleString()} / ${(s.targets.resistance||0).toLocaleString()}</span></div>
+                    </div>
+                    ` : ''}
+                    <canvas id="chart-${s.ticker}" width="280" height="120"></canvas>
+                </div>
+            `).join('');
+
+            // 차트
+            (data.recommended_stocks || []).forEach(s => {
+                fetchChart(s.ticker);
+            });
+
+            // 뉴스
+            const domEl = document.getElementById('domesticNews');
+            domEl.innerHTML = (data.domestic_news || []).map(n => `
+                <li><a href="${n.link}" target="_blank">${n.title}</a><div class="source">${n.source || '국내'}</div></li>
+            `).join('') || '<li>뉴스 없음</li>';
+
+            const intEl = document.getElementById('internationalNews');
+            intEl.innerHTML = (data.international_news || []).map(n => `
+                <li><a href="${n.link}" target="_blank">${n.title}</a><div class="source">${n.source || '해외'}</div></li>
+            `).join('') || '<li>뉴스 없음</li>';
+        }
+
+        async function fetchChart(ticker) {
+            try {
+                const res = await fetch(`${API_BASE}/api/stocks/${ticker}/chart?days=60`);
+                const data = await res.json();
+                if (!data || data.length === 0) return;
+                
+                const ctx = document.getElementById(`chart-${ticker}`);
+                if (!ctx) return;
+
+                new Chart(ctx.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: data.map(d => d.date),
+                        datasets: [{
+                            label: '종가',
+                            data: data.map(d => d.close),
+                            borderColor: '#58a6ff',
+                            backgroundColor: 'rgba(88,166,255,0.1)',
+                            fill: true,
+                            tension: 0.2,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { display: true, ticks: { maxTicksLimit: 6 } },
+                            y: { display: true, ticks: { callback: v => v?.toLocaleString() } }
+                        }
+                    }
+                });
+            } catch (e) { console.warn('Chart load fail:', ticker, e); }
+        }
+
+        loadReport();
+    </script>
+</body>
+</html>
