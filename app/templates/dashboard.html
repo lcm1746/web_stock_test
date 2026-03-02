@@ -159,10 +159,23 @@
             font-size: 0.9rem;
         }
         .btn:hover { opacity: 0.9; }
+        .data-delay-banner {
+            background: rgba(248,81,73,0.15);
+            border: 1px solid var(--red);
+            color: var(--red);
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+        .confidence-badge { font-size:0.7rem; color:var(--green); margin-left:6px; }
     </style>
 </head>
 <body>
     <div class="container">
+        <div id="dataDelayBanner" class="data-delay-banner" style="display:none;">
+            ⚠️ 데이터 지연: <span id="dataDelayMinutes">--</span>분 | 출처: <span id="dataSource">--</span> | 실시간 아님
+        </div>
         <header>
             <div>
                 <h1>📊 주식 추천 서비스</h1>
@@ -222,8 +235,21 @@
         function renderReport(data) {
             document.getElementById('reportDate').textContent = `${data.report_date} ${data.report_time}`;
             
+            // 데이터 지연 경고
+            const meta = data.data_meta || data.market_overview?.data_meta;
+            const banner = document.getElementById('dataDelayBanner');
+            if (meta) {
+                const dm = document.getElementById('dataDelayMinutes');
+                const ds = document.getElementById('dataSource');
+                if (dm) dm.textContent = meta.delay_minutes ?? '--';
+                if (ds) ds.textContent = meta.source ?? '--';
+                banner.style.display = (meta.is_delayed || (meta.delay_minutes || 0) > 15) ? 'block' : 'none';
+            } else {
+                banner.style.display = 'none';
+            }
+            
             // 시장 현황
-            const m = data.market_overview;
+            const m = data.market_overview || {};
             document.getElementById('marketOverview').innerHTML = `
                 <div class="market-item">
                     <div class="label">KOSPI</div>
@@ -249,35 +275,32 @@
                     <h3>${s.name}</h3>
                     <div class="ticker">${s.ticker} · ${s.market}</div>
                     <div class="segment-badge">
-                        ${s.segment === 'smallcap' ? '소형주 (5만원 미만)' : '우량주 (5만원 이상)'}
+                        ${s.segment === 'smallcap' ? '소형주 (5만원↓)' : '우량주 (5만원↑)'}
                     </div>
+                    ${s.confidence_score != null ? `<span class="confidence-badge">확신도 ${s.confidence_score}%</span>` : ''}
                     <div class="price">
                         ${s.close?.toLocaleString() ?? '-'}원
                         <span class="${s.change_pct >= 0 ? 'up' : 'down'}" style="font-size:0.9rem;margin-left:8px;">
                             ${s.change_pct >= 0 ? '+' : ''}${s.change_pct?.toFixed(2) ?? '-'}%
                         </span>
                     </div>
-                    <div class="reason">${s.reason || '-'}</div>
+                    <div class="reason">${s.explainable_reason || s.reason || '-'}</div>
                     ${(s.targets && s.targets.target_buy) ? `
                     <div class="targets">
                         <div class="row"><span class="label">매수가</span><span>${(s.targets.target_buy||0).toLocaleString()}원</span></div>
                         <div class="row"><span class="label">목표매도</span><span class="val up">${(s.targets.target_sell||0).toLocaleString()}원 (+${s.targets.expect_return_pct||0}%)</span></div>
-                        <div class="row"><span class="label">손절가</span><span class="val down">${(s.targets.stop_loss||0).toLocaleString()}원</span></div>
+                        <div class="row"><span class="label">손절가</span><span class="val down">${(s.targets.stop_loss||0).toLocaleString()}원 ${s.targets.stop_loss_type ? '('+s.targets.stop_loss_type+')' : ''}</span></div>
                         <div class="row"><span class="label">지지/저항</span><span>${(s.targets.support||0).toLocaleString()} / ${(s.targets.resistance||0).toLocaleString()}</span></div>
                     </div>
                     ` : ''}
                     <div class="details" id="details-${s.ticker}">
-                        <div class="details-title">근거 자료 & 출처</div>
-                        <div>▸ 지수·주가 출처: Yahoo Finance(^KS11, ^KQ11), KRX/PyKRX</div>
-                        <div style="margin-top:4px;">
-                            ▸ 기술적 지표 (RSI, 이동평균선):
-                            <span>RSI ${s.indicators?.rsi ? s.indicators.rsi.toFixed(1) : '-'} / MA5 ${s.indicators?.ma5 ? s.indicators.ma5.toFixed(0) : '-'} / MA20 ${s.indicators?.ma20 ? s.indicators.ma20.toFixed(0) : '-'}</span>
-                        </div>
-                        <div style="margin-top:4px;">▸ 일일 단타 전략: 피봇포인트(전일 고·저·종가) 기반 매수가·목표가·손절가 산출</div>
-                        <div style="margin-top:4px;">▸ 관련 뉴스 (최신순):</div>
+                        <div class="details-title">근거 자료 & 출처 (Explainable Quant)</div>
+                        <div style="margin-top:6px;">${s.explainable_reason || '-'}</div>
+                        <div style="margin-top:6px;">▸ 출처: Yahoo Finance, KRX/PyKRX | 손절: ${s.targets?.stop_loss_type || '정보 부족'}</div>
+                        <div style="margin-top:4px;">▸ 관련 뉴스 (감성 포함):</div>
                         <ul>
                             ${(s.related_news || []).map(n => `
-                                <li><a href="${n.link}" target="_blank">${n.title}</a> <span style="color:var(--muted)">(${n.source || '뉴스'})</span></li>
+                                <li><a href="${n.link || '#'}" target="_blank">${n.title}</a> <span style="color:var(--muted)">(${n.source || '뉴스'} ${n.sentiment ? '· '+n.sentiment : ''})</span></li>
                             `).join('') || '<li>관련 뉴스 없음</li>'}
                         </ul>
                     </div>

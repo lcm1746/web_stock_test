@@ -52,6 +52,7 @@ class DailyReport(BaseModel):
     """일일 리포트"""
     report_date: date
     market_overview: dict
-    recommended_stocks: list
+    data_meta: Optional[dict] = None  # 지연시간, 출처 등
+    recommended_stocks: list  # confidence_score, explainable_reason 포함
     domestic_news: list
     international_news: list
